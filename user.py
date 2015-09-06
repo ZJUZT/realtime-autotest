@@ -61,14 +61,14 @@ class User(threading.Thread):
 			logger.info("login success")
 		else:
 			logger.error("login fail")
-			exit(1)
+			raise Exception
 		# get realtime token
 		if 'realtime_token' in response.cookies.keys() and 'csrf_cookie_name' in response.cookies.keys():
 			self.realtime_token = response.cookies['realtime_token']
 			self.request_token = response.cookies['csrf_cookie_name']
 		else:
 			logger.error("login realtime server fail")
-			exit(1)
+			raise Exception
 		ws_thread = ws_realtime.WsRealTime(self.realtime_token, email=self.email)
 		ws_thread.setDaemon(True)
 		ws_thread.start()
@@ -78,25 +78,22 @@ class User(threading.Thread):
 		uri = action_uri_map[action["type"]]
 		params = action["params"]
 		session = self.session
-		try:
-			if method == resource.PUT:
-				response = session.put(url=resource.protocol + resource.host + uri, data=json.dumps(params))
-			elif method == resource.POST:
-				headers = {
-					'requesttoken': self.request_token
-				}
-				response = session.post(url=resource.protocol + resource.host + uri, data=params, headers=headers)
-			else:
-				response = session.get(url=resource.protocol + resource.host + uri, params=params)
+		if method == resource.PUT:
+			response = session.put(url=resource.protocol + resource.host + uri, data=json.dumps(params))
+		elif method == resource.POST:
+			headers = {
+				'requesttoken': self.request_token
+			}
+			response = session.post(url=resource.protocol + resource.host + uri, data=params, headers=headers)
+		else:
+			response = session.get(url=resource.protocol + resource.host + uri, params=params)
 
-			response = response.json()
-			if 'success' in response.keys() and response['success'] is True:
-				logger.info(action["type"] + " success")
+		response = response.json()
+		if 'success' in response.keys() and response['success'] is True:
+			logger.info(action["type"] + " success")
 			return response
-		except Exception, e:
-			logger.error(e)
-			if action["type"] == resource.REVIEW_INVITATION:
-				self.review_num -= 1
+		else:
+			raise Exception
 
 	def logout(self):
 		self.session.close()
@@ -116,18 +113,11 @@ class User(threading.Thread):
 					"visiable": True,
 				}
 			}
-			res = self.do_action(action, resource.PUT)
-			self.group.append(res['group']['id'])
-
-	def delete_group(self):
-		for group in self.group:
-			action = {
-				"type": resource.DELETE_GROUP,
-				"params": {
-					"group_id": group
-				}
-			}
-			self.do_action(action, resource.PUT)
+			response = self.do_action(action, resource.PUT)
+			if 'success' in response.keys() and response['success'] is True:
+				self.group.append(response['group']['id'])
+			else:
+				raise Exception
 
 	def create_item(self, item_type, number):
 		for i in range(1, number + 1):
@@ -140,12 +130,15 @@ class User(threading.Thread):
 			}
 			if item_type == resource.CREATE_FILE:
 				action["params"]["type"] = 1
-			res = self.do_action(action, resource.PUT)
-			if item_type == resource.CREATE_FILE:
-				self.file.append(res["new_file"]["id"])
-			elif item_type == resource.CREATE_FOLDER:
-				self.folder.append(res["new_folder"]["id"])
-			time.sleep(0.1)
+			response = self.do_action(action, resource.PUT)
+			if 'success' in response.keys() and response['success'] is True:
+				if item_type == resource.CREATE_FILE:
+					self.file.append(response["new_file"]["id"])
+				elif item_type == resource.CREATE_FOLDER:
+					self.folder.append(response["new_folder"]["id"])
+				time.sleep(0.1)
+			else:
+				raise Exception
 
 	def delete_item(self):
 		action = {
@@ -154,27 +147,20 @@ class User(threading.Thread):
 				"item_typed_ids[]": "%s%d" % ("folder_", self.test_folder)
 			}
 		}
-		self.do_action(action, resource.POST)
+		res = self.do_action(action, resource.POST)
+
+	def delete_group(self):
+
+		for group in self.group:
+			action = {
+				"type": resource.DELETE_GROUP,
+				"params": {
+					"group_id": group
+				}
+			}
+			self.do_action(action, resource.PUT)
 
 	def do_action_list(self):
-		# create a test folder at root directory
-		if self.action_list is None:
-			return
-		action = {
-			"type": resource.CREATE_FOLDER,
-			"params": {
-				"name": "test",
-				"parent_folder_id": "own"
-			}
-		}
-		res = self.do_action(action, resource.PUT)
-
-		# get test folder id
-		self.test_folder = res['new_folder']['id']
-		self.create_item(resource.CREATE_FILE, self.file_num)
-		self.create_item(resource.CREATE_FOLDER, self.folder_num)
-		self.create_group(self.group_num)
-		self.folder.append(self.test_folder)
 		for action in self.action_list:
 			action_type = action['type']
 			if action['target'] == resource.FOLDER:
@@ -194,13 +180,43 @@ class User(threading.Thread):
 						resource.GROUP, group)
 					self.do_action(action, action['method'])
 
-		# delete all the file created for test
-		self.delete_item()
-		self.delete_group()
-
 	def run(self):
-		# login
-		self.login()
-		self.do_action_list()
-		# logout
-		self.logout()
+		try:
+			self.login()
+		except Exception, e:
+			logger.error("login fail")
+			exit(1)
+		if self.action_list is None:
+			return
+		try:
+			# create a test folder at root directory
+			action = {
+				"type": resource.CREATE_FOLDER,
+				"params": {
+					"name": "test",
+					"parent_folder_id": "own"
+				}
+			}
+			res = self.do_action(action, resource.PUT)
+
+			# get test folder id
+			self.test_folder = res['new_folder']['id']
+			self.create_item(resource.CREATE_FILE, self.file_num)
+			self.create_item(resource.CREATE_FOLDER, self.folder_num)
+			self.create_group(self.group_num)
+			self.folder.append(self.test_folder)
+			self.do_action_list()
+			# logout
+			self.logout()
+
+		except Exception, e:
+			logger.error(e)
+		finally:
+			# delete all the file created for test anyway
+			try:
+				self.delete_item()
+				self.delete_group()
+			except Exception, e:
+				logger.error("Can't delete resource created for test")
+			finally:
+				exit(1)
