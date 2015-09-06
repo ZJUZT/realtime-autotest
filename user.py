@@ -218,5 +218,5 @@ class User(threading.Thread):
 				self.delete_group()
 			except Exception, e:
 				logger.error("Can't delete resource created for test")
-			finally:
 				exit(1)
+
