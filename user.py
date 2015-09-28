@@ -1,5 +1,5 @@
 import json
-import ws_realtime
+import SocketIOServer
 import threading
 import logging
 import logging.config
@@ -46,6 +46,7 @@ class User(threading.Thread):
 		self.review_num = self.file_num
 		self.session = requests.Session()
 		self.user_id = None
+		self.socketio_thread = None
 
 	# log user in
 	def login(self):
@@ -69,9 +70,9 @@ class User(threading.Thread):
 		else:
 			logger.error("login realtime server fail")
 			raise Exception
-		ws_thread = ws_realtime.WsRealTime(self.realtime_token, email=self.email)
-		ws_thread.setDaemon(True)
-		ws_thread.start()
+		self.socketio_thread = SocketIOServer.SocketIOServer(self.realtime_token, email=self.email)
+		self.socketio_thread.setDaemon(True)
+		self.socketio_thread.start()
 
 	def do_action(self, action, method):
 		action_uri_map = resource.action_uri_map
@@ -99,7 +100,6 @@ class User(threading.Thread):
 		self.session.close()
 		logger.info("logout success")
 		# wait for websocket thread to handle all the notifications
-		time.sleep(2)
 
 	def create_group(self, number):
 		for i in range(1, number + 1):
@@ -206,8 +206,6 @@ class User(threading.Thread):
 			self.create_group(self.group_num)
 			self.folder.append(self.test_folder)
 			self.do_action_list()
-			# logout
-			self.logout()
 
 		except Exception, e:
 			logger.error(e)
@@ -216,6 +214,9 @@ class User(threading.Thread):
 			try:
 				self.delete_item()
 				self.delete_group()
+				# logout
+				self.logout()
+				time.sleep(2)
 			except Exception, e:
 				logger.error("Can't delete resource created for test")
 				exit(1)

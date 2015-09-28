@@ -6,7 +6,7 @@ __author__ = 'Jason-Zhang'
 
 if __name__ == "__main__":
 	# create send share link for each folder
-	target_user = [8420, 42]
+	target_user = [8420]
 	user1 = {
 		"email": "3131@qq.com",
 		"password": "1994zt87",
@@ -82,7 +82,7 @@ if __name__ == "__main__":
 		"target": resource.FOLDER,
 		"type": resource.COLLABS,
 		"params": {
-			"invited_users": "8420:editor",
+			"invited_users": invited_users,
 			"invited_groups": "",
 			"invitation_message": "123"
 		}
