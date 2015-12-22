@@ -3,7 +3,7 @@ __author__ = 'Jason-Zhang'
 defines basic uri and other resources
 '''
 protocol = "http://"
-host = "121.40.237.99"
+host = "zhangteng.yifangyun.com"
 
 # action target
 FILE = "file"
